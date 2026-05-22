@@ -45,8 +45,9 @@ def load_sheet(
     Args:
         file_path: Path to the Excel file.
         sheet_name: Name of the sheet to load.
-        has_merged_cells: Hint that the sheet has merged cells (reserved for
-            future openpyxl fallback logic).
+        has_merged_cells: Hint that the sheet has merged cells. Currently forwarded
+            to ``select_engine``; reserved for a future openpyxl fallback path
+            when chunked loading of merged-cell sheets is required.
         header: Row (0-indexed) to use as the column header.
         skiprows: Number of rows to skip before the header.
         nrows: Maximum number of data rows to read.

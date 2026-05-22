@@ -106,6 +106,26 @@ def test_dunder_import_blocked():
     assert result["error"] is not None
 
 
+# ── Inplace operator guard ────────────────────────────────────────────────────
+
+
+def test_inplace_add_works():
+    result = execute_code("x = 1\nx += 2\nresult = x", sheets={})
+    assert result["error"] is None
+    assert result["result"] == "3"
+
+
+def test_inplace_invalid_operator_returns_error():
+    """_guarded_inplacevar raises ValueError for unsupported operators."""
+    from core.sandbox import _guarded_inplacevar
+
+    try:
+        _guarded_inplacevar("??=", 1, 2)
+        assert False, "Expected ValueError"  # noqa: B011
+    except ValueError as exc:
+        assert "Unsupported" in str(exc)
+
+
 # ── Timeout ───────────────────────────────────────────────────────────────────
 
 
