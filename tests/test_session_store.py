@@ -1,5 +1,7 @@
 """Tests for core/session_store.py — SQLite session CRUD + file path helpers."""
 
+from pathlib import Path
+
 import pytest
 
 from core.session_store import SessionNotFoundError, SessionStore
@@ -74,8 +76,6 @@ async def test_delete_removes_session(store):
 async def test_delete_removes_file_from_disk(store, tmp_path):
     session = await store.create("test.xlsx", b"content", {})
     file_path = session["file_path"]
-    from pathlib import Path
-
     assert Path(file_path).exists()
     await store.delete(session["id"])
     assert not Path(file_path).exists()

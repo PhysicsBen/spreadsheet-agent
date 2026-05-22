@@ -6,6 +6,10 @@ from typing import Any
 
 import openpyxl
 from openpyxl.utils import get_column_letter, range_boundaries
+from openpyxl.worksheet.worksheet import Worksheet
+
+# Number of formula cells to sample when checking for cached values.
+_FORMULA_SAMPLE_SIZE = 5
 
 
 def inspect_workbook(
@@ -95,11 +99,11 @@ def _check_formula_values_available(source: Path | bytes) -> bool:
             for cell in row:
                 if isinstance(cell.value, str) and cell.value.startswith("="):
                     formula_cells.append((ws.title, cell.row, cell.column))
-                    if len(formula_cells) >= 5:
+                    if len(formula_cells) >= _FORMULA_SAMPLE_SIZE:
                         break
-            if len(formula_cells) >= 5:
+            if len(formula_cells) >= _FORMULA_SAMPLE_SIZE:
                 break
-        if len(formula_cells) >= 5:
+        if len(formula_cells) >= _FORMULA_SAMPLE_SIZE:
             break
 
     wb_f.close()
@@ -133,7 +137,7 @@ def _check_formula_values_available(source: Path | bytes) -> bool:
     return has_cached
 
 
-def _check_error_cells(ws) -> bool:
+def _check_error_cells(ws: Worksheet) -> bool:
     """Return True if any cell in the first 100 rows contains an Excel error value."""
     max_row = min(ws.max_row or 0, 100)
     max_col = ws.max_column or 0
@@ -148,7 +152,7 @@ def _check_error_cells(ws) -> bool:
     return False
 
 
-def _detect_tables(ws, sheet_name: str) -> list[dict[str, Any]]:
+def _detect_tables(ws: Worksheet, sheet_name: str) -> list[dict[str, Any]]:
     """Detect tables in a worksheet.
 
     Precedence:
@@ -161,7 +165,7 @@ def _detect_tables(ws, sheet_name: str) -> list[dict[str, Any]]:
     return _detect_contiguous_regions(ws, sheet_name)
 
 
-def _detect_named_tables(ws, sheet_name: str) -> list[dict[str, Any]]:
+def _detect_named_tables(ws: Worksheet, sheet_name: str) -> list[dict[str, Any]]:
     """Return metadata for all named Excel tables in the worksheet."""
     tables: list[dict[str, Any]] = []
 
@@ -196,7 +200,7 @@ def _detect_named_tables(ws, sheet_name: str) -> list[dict[str, Any]]:
     return tables
 
 
-def _detect_contiguous_regions(ws, sheet_name: str) -> list[dict[str, Any]]:
+def _detect_contiguous_regions(ws: Worksheet, sheet_name: str) -> list[dict[str, Any]]:
     """Heuristically detect tables by finding contiguous non-empty cell blocks."""
     max_row = ws.max_row
     max_col = ws.max_column
