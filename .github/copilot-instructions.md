@@ -1,5 +1,15 @@
 # Spreadsheet Agent — Project Guidelines
 
+## Agent: Read This First
+
+If you are an autonomous or delegated agent working on this project:
+
+1. **Read `implementation_plan.md` in full before writing any code.** It contains the authoritative design decisions, phase breakdown, risk mitigations, driver strategy, data type gotchas, and API contracts. All implementation choices must align with it.
+2. **Follow the Development Workflow section below** — feature branch, plan, implement, test, lint, docs, PR.
+3. **Work one phase at a time.** Each phase builds on the previous. Check that prior phase artifacts exist before starting.
+4. **When in doubt about a design decision, consult `implementation_plan.md` first.** Do not invent architecture that contradicts it.
+5. **Never hardcode secrets.** All config comes from environment variables via `core/config.py`.
+
 ## Project Overview
 
 This project is an AI agent that handles Q&A over large Excel spreadsheets. The agent intelligently decides how to traverse and iterate through spreadsheet data to answer questions accurately. It is exposed as a REST API via FastAPI and packaged for deployment in Docker.
