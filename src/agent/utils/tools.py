@@ -105,6 +105,8 @@ def _get_table_dataframe(
     min_col, _min_row, max_col, max_row = range_boundaries(table_meta["range"])
     header_row = int(table_meta.get("header_row", 1))
     data_start = max(header_row - 1, 0)
+    # The runtime sheet DataFrame is loaded with Excel row 1 as the header, so
+    # DataFrame row 0 corresponds to Excel row 2.
     data_end = max(max_row - 2, data_start - 1)
     subset = dataframe.iloc[data_start : data_end + 1, min_col - 1 : max_col].copy()
     subset.columns = table_meta.get("columns", list(subset.columns))
