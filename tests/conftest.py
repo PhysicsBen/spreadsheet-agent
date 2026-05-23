@@ -2,6 +2,7 @@
 
 import io
 import json
+import zipfile
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -112,6 +113,73 @@ def two_region_xlsx() -> bytes:
     ws.append(["Category", "Count"])
     ws.append(["Fruit", 2])
     ws.append(["Veg", 5])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@pytest.fixture
+def formula_xlsx_with_cached() -> bytes:
+    """Workbook with formula cells that have cached values (simulates Excel-saved file).
+
+    openpyxl does not compute formulas, so we patch the worksheet XML inside the
+    ZIP container to embed a ``<v>`` cached-value element alongside the formula.
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "CalcCached"
+    ws["A1"] = 10
+    ws["B1"] = 20
+    ws["C1"] = "=A1+B1"  # Formula; no cached value yet
+
+    raw = io.BytesIO()
+    wb.save(raw)
+    xlsx_bytes = raw.getvalue()
+
+    # Patch the worksheet XML: add <v>30</v> to the C1 formula cell so that
+    # openpyxl's data_only=True load returns a non-None cached value.
+    buf_out = io.BytesIO()
+    with (
+        zipfile.ZipFile(io.BytesIO(xlsx_bytes), "r") as zin,
+        zipfile.ZipFile(buf_out, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            # Match the worksheet file regardless of capitalisation (openpyxl uses
+            # lowercase 'sheet1.xml' but the spec allows other casing).
+            if item.filename.lower() == "xl/worksheets/sheet1.xml":
+                xml = data.decode("utf-8")
+                # openpyxl writes: <f>A1+B1</f><v /></c> — replace empty value
+                # with the cached result so data_only=True returns a non-None value.
+                patched = xml.replace(
+                    "<f>A1+B1</f><v /></c>", "<f>A1+B1</f><v>30</v></c>"
+                )
+                # Guard: if the pattern was not found the fixture would be useless.
+                assert patched != xml, (
+                    "formula_xlsx_with_cached: expected XML pattern not found; "
+                    "check openpyxl serialisation format."
+                )
+                data = patched.encode("utf-8")
+            zout.writestr(item, data)
+    return buf_out.getvalue()
+
+
+@pytest.fixture
+def legacy_xls_bytes() -> bytes:
+    """Minimal legacy .xls file created with xlwt."""
+    try:
+        import xlwt
+    except ImportError:
+        pytest.skip("xlwt not installed — skipping legacy .xls fixture")
+
+    wb = xlwt.Workbook()
+    ws = wb.add_sheet("LegacySheet")
+    ws.write(0, 0, "Product")
+    ws.write(0, 1, "Price")
+    ws.write(1, 0, "Widget")
+    ws.write(1, 1, 9.99)
+    ws.write(2, 0, "Gadget")
+    ws.write(2, 1, 19.99)
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
