@@ -108,3 +108,23 @@ def two_region_xlsx() -> bytes:
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+@pytest.fixture
+def collision_tables_xlsx() -> bytes:
+    """Workbook with two tables sharing the same column names."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Collisions"
+    ws.append(["Name", "Amount"])
+    ws.append(["Alice", 100])
+    ws.append(["Bob", 200])
+    # Use explicit empty cells in both columns so the inspector sees a fully
+    # blank separator row between the two same-shaped regions.
+    ws.append([None, None])
+    ws.append(["Name", "Amount"])
+    ws.append(["Carrot", 10])
+    ws.append(["Daikon", 20])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
