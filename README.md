@@ -13,8 +13,13 @@ Built with **LangGraph** (stateful ReAct agent), **FastAPI**, and **OpenAI**.
 - [API Reference](#api-reference)
 - [Architecture](#architecture)
 - [Key Design Decisions](#key-design-decisions)
-- [Environment Variables](#environment-variables)
-- [Local Development](#local-development)
+- [Agent Tools](#agent-tools)
+- [API Reference](#api-reference)
+- [Getting Started](#getting-started)
+- [Local Chat UI](#local-chat-ui)
+- [Running with Docker](#running-with-docker)
+- [Configuration](#configuration)
+- [Development Workflow](#development-workflow)
 - [Testing](#testing)
 - [Deployment & Operations Runbook](#deployment--operations-runbook)
 - [Security Considerations](#security-considerations)
@@ -162,7 +167,63 @@ curl http://localhost:8000/health
 
 ---
 
-## Key Design Decisions
+## Local Chat UI
+
+A Streamlit-based chat interface is included for testing the agent locally. It is a
+dev/test tool only — it calls the FastAPI backend and requires it to be running.
+
+### Setup
+
+```bash
+# Install dev dependencies (includes streamlit)
+uv sync --extra dev
+```
+
+### Start the backend
+
+```bash
+# Option A — Docker Compose (recommended)
+docker compose up
+
+# Option B — dev server with auto-reload
+uv run fastapi dev src/api/main.py
+```
+
+### Run the UI
+
+```bash
+streamlit run ui/app.py
+```
+
+The UI will open at `http://localhost:8501`. By default it connects to the API at
+`http://localhost:8000`. To point it at a different address, set the `API_BASE_URL`
+environment variable before starting:
+
+```bash
+API_BASE_URL=http://my-server:8000 streamlit run ui/app.py
+```
+
+### Features
+
+- **Sidebar** — upload `.xlsx`, `.xlsm`, `.xls`, or `.xlsb` files; view workbook
+  metadata (sheets, dimensions, detected tables); start a new conversation thread
+  or switch to a different file.
+- **Chat area** — ask natural-language questions about your spreadsheet; each
+  assistant reply includes a collapsed *Sources & Usage* panel showing the tables
+  consulted, tool calls made, tokens consumed, and model used.
+
+---
+
+## Running with Docker
+
+### Docker Compose (recommended)
+
+```bash
+# Build and start
+docker compose up --build
+
+# Run in the background
+docker compose up -d --build
 
 | Decision | Rationale |
 |----------|-----------|
