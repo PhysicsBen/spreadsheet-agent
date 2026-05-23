@@ -23,7 +23,7 @@ def _write_fixture(tmp_path: Path, filename: str, file_bytes: bytes) -> Path:
 
 def _make_config(
     *,
-    workbook_meta: dict,
+    workbook_meta: dict | None,
     dataframes: dict | None = None,
     file_path: Path | None = None,
 ) -> dict:
@@ -243,3 +243,168 @@ async def test_load_sheet_adds_dataframe_for_execute_code(tmp_path, multi_sheet_
     assert load_result["ok"] is True
     assert "Lookup" in dataframes
     assert exec_result["sandbox"]["result"] == "Alpha"
+
+
+# ── search_cells: remaining condition types ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_search_cells_eq_condition(tmp_path, named_table_xlsx):
+    file_path = _write_fixture(tmp_path, "named.xlsx", named_table_xlsx)
+    workbook_meta = inspect_workbook_meta(file_path)
+    dataframes = {"Sales": load_sheet_df(file_path, "Sales")}
+
+    result = await _call_tool(
+        search_cells,
+        {
+            "table_id": "Sales.SalesTable",
+            "column_name": "Rep",
+            "condition": "eq",
+            "value": "Alice",
+            "limit": 5,
+        },
+        config=_make_config(workbook_meta=workbook_meta, dataframes=dataframes),
+    )
+
+    assert result["ok"] is True
+    assert result["total_matches"] == 1
+    assert result["rows"][0]["Rep"] == "Alice"
+
+
+@pytest.mark.asyncio
+async def test_search_cells_lt_condition(tmp_path, named_table_xlsx):
+    file_path = _write_fixture(tmp_path, "named.xlsx", named_table_xlsx)
+    workbook_meta = inspect_workbook_meta(file_path)
+    dataframes = {"Sales": load_sheet_df(file_path, "Sales")}
+
+    result = await _call_tool(
+        search_cells,
+        {
+            "table_id": "Sales.SalesTable",
+            "column_name": "Amount",
+            "condition": "lt",
+            "value": 1500,
+            "limit": 5,
+        },
+        config=_make_config(workbook_meta=workbook_meta, dataframes=dataframes),
+    )
+
+    assert result["ok"] is True
+    assert result["total_matches"] == 1
+    assert result["rows"][0]["Rep"] == "Alice"
+
+
+@pytest.mark.asyncio
+async def test_search_cells_contains_condition(tmp_path, named_table_xlsx):
+    file_path = _write_fixture(tmp_path, "named.xlsx", named_table_xlsx)
+    workbook_meta = inspect_workbook_meta(file_path)
+    dataframes = {"Sales": load_sheet_df(file_path, "Sales")}
+
+    result = await _call_tool(
+        search_cells,
+        {
+            "table_id": "Sales.SalesTable",
+            "column_name": "Rep",
+            "condition": "contains",
+            "value": "li",
+            "limit": 5,
+        },
+        config=_make_config(workbook_meta=workbook_meta, dataframes=dataframes),
+    )
+
+    assert result["ok"] is True
+    assert result["total_matches"] == 1
+    assert result["rows"][0]["Rep"] == "Alice"
+
+
+# ── Error strings (not exceptions) on bad input ───────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_inspect_workbook_returns_error_when_metadata_missing():
+    result = await _call_tool(
+        inspect_workbook,
+        {},
+        config=_make_config(workbook_meta=None),
+    )
+    assert result["ok"] is False
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_sheet_sample_returns_error_on_unknown_table_id(
+    tmp_path, named_table_xlsx
+):
+    file_path = _write_fixture(tmp_path, "named.xlsx", named_table_xlsx)
+    workbook_meta = inspect_workbook_meta(file_path)
+    dataframes = {"Sales": load_sheet_df(file_path, "Sales")}
+
+    result = await _call_tool(
+        get_sheet_sample,
+        {"table_id": "Sales.NonExistent", "limit": 5},
+        config=_make_config(workbook_meta=workbook_meta, dataframes=dataframes),
+    )
+
+    assert result["ok"] is False
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_get_column_info_returns_error_on_unknown_column(
+    tmp_path, named_table_xlsx
+):
+    file_path = _write_fixture(tmp_path, "named.xlsx", named_table_xlsx)
+    workbook_meta = inspect_workbook_meta(file_path)
+    dataframes = {"Sales": load_sheet_df(file_path, "Sales")}
+
+    result = await _call_tool(
+        get_column_info,
+        {"table_id": "Sales.SalesTable", "column_name": "NoSuchColumn"},
+        config=_make_config(workbook_meta=workbook_meta, dataframes=dataframes),
+    )
+
+    assert result["ok"] is False
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_search_cells_returns_error_on_unknown_table_id(
+    tmp_path, named_table_xlsx
+):
+    file_path = _write_fixture(tmp_path, "named.xlsx", named_table_xlsx)
+    workbook_meta = inspect_workbook_meta(file_path)
+    dataframes = {"Sales": load_sheet_df(file_path, "Sales")}
+
+    result = await _call_tool(
+        search_cells,
+        {
+            "table_id": "Sales.Missing",
+            "column_name": "Rep",
+            "condition": "eq",
+            "value": "Alice",
+        },
+        config=_make_config(workbook_meta=workbook_meta, dataframes=dataframes),
+    )
+
+    assert result["ok"] is False
+    assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_load_sheet_returns_error_on_unknown_sheet(tmp_path, named_table_xlsx):
+    file_path = _write_fixture(tmp_path, "named.xlsx", named_table_xlsx)
+    workbook_meta = inspect_workbook_meta(file_path)
+    config = _make_config(
+        workbook_meta=workbook_meta,
+        dataframes={},
+        file_path=file_path,
+    )
+
+    result = await _call_tool(
+        load_sheet,
+        {"sheet_name": "NoSuchSheet"},
+        config=config,
+    )
+
+    assert result["ok"] is False
+    assert "error" in result
