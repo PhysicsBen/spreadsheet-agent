@@ -79,7 +79,9 @@ def _find_sheet_meta(
     return None
 
 
-def _find_table_meta(table_id: str, workbook_meta: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+def _find_table_meta(
+    table_id: str, workbook_meta: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
     for sheet_meta in workbook_meta.get("sheets", []):
         for table_meta in sheet_meta.get("tables", []):
             if table_meta.get("id") == table_id:
@@ -341,7 +343,9 @@ async def load_sheet(sheet_name: str, config: ToolConfig = None) -> str:
         workbook_meta = configurable.get("workbook_meta", {})
         file_path = configurable.get("file_path")
         if not file_path:
-            return _error_result("Runtime config is missing file_path for sheet loading")
+            return _error_result(
+                "Runtime config is missing file_path for sheet loading"
+            )
 
         dataframes = _get_runtime_dataframes(configurable)
         sheet_meta = _find_sheet_meta(workbook_meta, sheet_name)

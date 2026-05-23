@@ -3,9 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from core.dataframe_loader import load_sheet as load_sheet_df
-from core.workbook_inspector import inspect_workbook as inspect_workbook_meta
-
 from agent.utils.tools import (
     execute_code,
     get_column_info,
@@ -14,6 +11,8 @@ from agent.utils.tools import (
     load_sheet,
     search_cells,
 )
+from core.dataframe_loader import load_sheet as load_sheet_df
+from core.workbook_inspector import inspect_workbook as inspect_workbook_meta
 
 
 def _write_fixture(tmp_path: Path, filename: str, file_bytes: bytes) -> Path:
@@ -136,7 +135,10 @@ async def test_get_column_info_reports_numeric_and_categorical_stats(
     assert numeric_result["column"]["mean"] == 1500.0
     assert numeric_result["column"]["min"] == 1000
     assert numeric_result["column"]["max"] == 2000
-    assert categorical_result["column"]["top_values"][0] == {"value": "Alice", "count": 1}
+    assert categorical_result["column"]["top_values"][0] == {
+        "value": "Alice",
+        "count": 1,
+    }
 
 
 @pytest.mark.asyncio
