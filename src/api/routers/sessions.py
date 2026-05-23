@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
@@ -14,13 +14,17 @@ from core.workbook_inspector import inspect_workbook
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 _ZIP_SIGNATURE = b"PK\x03\x04"
-_OLE_SIGNATURE = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
+_OLE_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 _ZIP_EXTENSIONS = {".xlsx", ".xlsm"}
 _OLE_EXTENSIONS = {".xls", ".xlsb"}
 
 
 def _get_session_store(request: Request) -> SessionStore:
     return request.app.state.session_store
+
+
+SessionStoreDep = Annotated[SessionStore, Depends(_get_session_store)]
+UploadFileDep = Annotated[UploadFile, File(...)]
 
 
 def _safe_filename(filename: str | None) -> str:
@@ -45,7 +49,8 @@ def _validate_excel_magic_bytes(file_bytes: bytes, filename: str) -> None:
 
 
 async def _file_size_bytes(file_path: str) -> int:
-    return await asyncio.to_thread(lambda: Path(file_path).stat().st_size)
+    stat_result = await asyncio.to_thread(Path(file_path).stat)
+    return stat_result.st_size
 
 
 def _collect_thread_ids_for_session(checkpointer: Any, session_id: str) -> list[str]:
@@ -68,8 +73,8 @@ def _collect_thread_ids_for_session(checkpointer: Any, session_id: str) -> list[
 @router.post("", response_model=SessionResponse, status_code=status.HTTP_201_CREATED)
 async def create_session(
     request: Request,
-    file: UploadFile = File(...),
-    session_store: SessionStore = Depends(_get_session_store),
+    file: UploadFileDep,
+    session_store: SessionStoreDep,
 ) -> SessionResponse:
     filename = _safe_filename(file.filename)
     file_bytes = await file.read()
@@ -97,7 +102,7 @@ async def create_session(
 
 @router.get("", response_model=list[SessionListItem])
 async def list_sessions(
-    session_store: SessionStore = Depends(_get_session_store),
+    session_store: SessionStoreDep,
 ) -> list[SessionListItem]:
     sessions = await session_store.list()
     response: list[SessionListItem] = []
@@ -116,7 +121,7 @@ async def list_sessions(
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(
     session_id: str,
-    session_store: SessionStore = Depends(_get_session_store),
+    session_store: SessionStoreDep,
 ) -> SessionResponse:
     try:
         record = await session_store.get(session_id)
@@ -136,14 +141,18 @@ async def get_session(
 async def delete_session(
     request: Request,
     session_id: str,
-    session_store: SessionStore = Depends(_get_session_store),
+    session_store: SessionStoreDep,
 ) -> None:
     try:
         thread_ids = await asyncio.to_thread(
-            _collect_thread_ids_for_session, request.app.state.graph.checkpointer, session_id
+            _collect_thread_ids_for_session,
+            request.app.state.graph.checkpointer,
+            session_id,
         )
         for thread_id in thread_ids:
-            await asyncio.to_thread(request.app.state.graph.checkpointer.delete_thread, thread_id)
+            await asyncio.to_thread(
+                request.app.state.graph.checkpointer.delete_thread, thread_id
+            )
         await session_store.delete(session_id)
     except SessionNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
@@ -153,7 +162,7 @@ async def delete_session(
 async def list_session_threads(
     request: Request,
     session_id: str,
-    session_store: SessionStore = Depends(_get_session_store),
+    session_store: SessionStoreDep,
 ) -> list[str]:
     try:
         await session_store.get(session_id)
@@ -161,5 +170,7 @@ async def list_session_threads(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
     return await asyncio.to_thread(
-        _collect_thread_ids_for_session, request.app.state.graph.checkpointer, session_id
+        _collect_thread_ids_for_session,
+        request.app.state.graph.checkpointer,
+        session_id,
     )

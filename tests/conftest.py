@@ -138,6 +138,8 @@ def collision_tables_xlsx() -> bytes:
 
 
 class MockCheckpointer:
+    """Minimal checkpointer stub used by API tests for thread enumeration/deletion."""
+
     def __init__(self, parent: "MockGraph") -> None:
         self._parent = parent
 
@@ -163,9 +165,13 @@ class MockCheckpointer:
 
 
 class MockGraph:
+    """Graph stub used by API tests to avoid real model calls."""
+
     def __init__(self) -> None:
         self.thread_sessions: dict[str, str] = {}
-        self.thread_messages: dict[str, list[object]] = {}
+        self.thread_messages: dict[
+            str, list[HumanMessage | AIMessage | ToolMessage]
+        ] = {}
         self.checkpointer = MockCheckpointer(self)
 
     def get_state(self, config):
