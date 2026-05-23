@@ -1,9 +1,9 @@
 """Graph construction and compile() call — singleton compiled at import time."""
 
 import asyncio
-from pathlib import Path
 import sqlite3
 import threading
+from pathlib import Path
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
@@ -33,8 +33,13 @@ def _run_coroutine(coroutine):
 
     def runner() -> None:
         try:
+            # When the graph is invoked from an async context, run the async node in a
+            # dedicated worker thread with its own event loop so the synchronous
+            # SqliteSaver-backed singleton graph remains usable.
             result["value"] = asyncio.run(coroutine)
-        except BaseException as exc:  # noqa: BLE001
+        except Exception as exc:
+            # Surface regular application exceptions from the worker thread while
+            # still allowing system-exiting exceptions to propagate normally.
             error["value"] = exc
 
     thread = threading.Thread(target=runner)
@@ -65,10 +70,15 @@ def build_graph(
     builder.add_node("call_model", _call_model_node)
     builder.add_node("call_tools", _call_tools_node)
     builder.add_edge(START, "call_model")
-    builder.add_conditional_edges("call_model", tools_condition, {"tools": "call_tools", END: END})
+    builder.add_conditional_edges(
+        "call_model", tools_condition, {"tools": "call_tools", END: END}
+    )
     builder.add_edge("call_tools", "call_model")
 
     iteration_limit = max_agent_iterations or settings.max_agent_iterations
+    # Each ReAct iteration can visit both `call_model` and `call_tools`, so the
+    # graph recursion limit must allow roughly two node executions per iteration
+    # plus the final terminating `call_model` step.
     compiled = builder.compile(checkpointer=checkpointer or _build_checkpointer())
     return compiled.with_config(recursion_limit=(iteration_limit * 2) + 1)
 

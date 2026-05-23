@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,10 @@ def _write_fixture(tmp_path: Path, filename: str, file_bytes: bytes) -> Path:
 
 
 class MockLLM:
-    def __init__(self, responder) -> None:
+    def __init__(
+        self,
+        responder: Callable[[list[object]], Awaitable[AIMessage]],
+    ) -> None:
         self._responder = responder
         self.bound_tool_names: list[str] = []
         self.system_prompts: list[str] = []
@@ -39,6 +43,8 @@ def _build_test_graph(
     *,
     max_agent_iterations: int = 5,
 ):
+    """Return a compiled test graph plus its open SQLite connection."""
+
     connection = sqlite3.connect(tmp_path / "graph.db", check_same_thread=False)
     saver = SqliteSaver(connection)
     return build_graph(
@@ -56,7 +62,9 @@ def test_graph_react_loop_routes_tool_calls_and_tracks_loaded_sheets(
     dataframes: dict[str, object] = {}
 
     async def responder(messages):
-        tool_messages = [message for message in messages if isinstance(message, ToolMessage)]
+        tool_messages = [
+            message for message in messages if isinstance(message, ToolMessage)
+        ]
         if not tool_messages:
             return AIMessage(
                 content="",
@@ -113,7 +121,9 @@ def test_graph_react_loop_routes_tool_calls_and_tracks_loaded_sheets(
         connection.close()
 
     tool_message_names = [
-        message.name for message in result["messages"] if isinstance(message, ToolMessage)
+        message.name
+        for message in result["messages"]
+        if isinstance(message, ToolMessage)
     ]
     assert llm.bound_tool_names == [
         "inspect_workbook",
@@ -133,7 +143,11 @@ def test_graph_react_loop_routes_tool_calls_and_tracks_loaded_sheets(
 
 
 def test_graph_persists_conversation_state_by_thread_id(tmp_path):
-    workbook_meta = {"filename": "memory.xlsx", "sheets": [], "formula_values_available": True}
+    workbook_meta = {
+        "filename": "memory.xlsx",
+        "sheets": [],
+        "formula_values_available": True,
+    }
 
     async def responder(messages):
         human_messages = [
@@ -185,14 +199,22 @@ def test_graph_persists_conversation_state_by_thread_id(tmp_path):
         connection.close()
 
     ai_contents = [
-        message.content for message in result["messages"] if isinstance(message, AIMessage)
+        message.content
+        for message in result["messages"]
+        if isinstance(message, AIMessage)
     ]
     assert "I can remember this thread." in ai_contents
-    assert result["messages"][-1].content == "You first asked: Remember my first question"
+    assert (
+        result["messages"][-1].content == "You first asked: Remember my first question"
+    )
 
 
 def test_graph_stops_runaway_loops_at_iteration_limit(tmp_path):
-    workbook_meta = {"filename": "loop.xlsx", "sheets": [], "formula_values_available": True}
+    workbook_meta = {
+        "filename": "loop.xlsx",
+        "sheets": [],
+        "formula_values_available": True,
+    }
 
     async def responder(messages):
         return AIMessage(

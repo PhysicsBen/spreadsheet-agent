@@ -1,11 +1,12 @@
 """LangGraph node functions for the spreadsheet agent."""
 
+import threading
 from typing import Any
 
 from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langgraph.prebuilt import ToolNode
 from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import ToolNode
 
 from agent.prompts import build_system_prompt
 from agent.utils.state import AgentState
@@ -14,6 +15,7 @@ from core.config import settings
 
 _TOOL_NODE = ToolNode(TOOLS)
 _DEFAULT_MODEL: Any | None = None
+_DEFAULT_MODEL_LOCK = threading.Lock()
 
 
 def _get_configurable(config: RunnableConfig | None) -> dict[str, Any]:
@@ -38,10 +40,14 @@ def _get_model(config: RunnableConfig | None) -> Any:
 
     global _DEFAULT_MODEL
     if _DEFAULT_MODEL is None:
-        _DEFAULT_MODEL = ChatOpenAI(
-            model=settings.openai_model,
-            api_key=settings.openai_api_key or None,
-        )
+        with _DEFAULT_MODEL_LOCK:
+            # Build the shared ChatOpenAI client lazily while preventing races when
+            # multiple graph invocations initialize the default model at once.
+            if _DEFAULT_MODEL is None:
+                _DEFAULT_MODEL = ChatOpenAI(
+                    model=settings.openai_model,
+                    api_key=settings.openai_api_key,
+                )
     return _DEFAULT_MODEL
 
 
@@ -52,9 +58,13 @@ async def call_model(
     """Invoke the chat model with the system prompt and conversation state."""
 
     prompt = build_system_prompt(state.get("workbook_meta", {}))
-    response = await _get_model(config).bind_tools(TOOLS).ainvoke(
-        [SystemMessage(content=prompt), *state.get("messages", [])],
-        config=config,
+    response = (
+        await _get_model(config)
+        .bind_tools(TOOLS)
+        .ainvoke(
+            [SystemMessage(content=prompt), *state.get("messages", [])],
+            config=config,
+        )
     )
     return {"messages": [response]}
 
@@ -65,7 +75,9 @@ async def call_tools(
 ) -> dict[str, list[Any]]:
     """Execute the tool calls emitted by the last model response."""
 
-    result = await _TOOL_NODE.ainvoke({"messages": state.get("messages", [])}, config=config)
+    result = await _TOOL_NODE.ainvoke(
+        {"messages": state.get("messages", [])}, config=config
+    )
     return {
         "messages": result["messages"],
         "loaded_sheet_names": sorted(_get_runtime_dataframes(config).keys()),
