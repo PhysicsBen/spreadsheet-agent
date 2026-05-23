@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from datetime import date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -18,6 +19,10 @@ from core.dataframe_loader import load_sheet as load_sheet_dataframe
 from core.sandbox import execute_code as run_sandboxed_code
 
 ToolConfig = Annotated[RunnableConfig, InjectedToolArg]
+logger = logging.getLogger(__name__)
+
+_WORKSHEET_HEADER_ROW_NUMBER = 1
+_DATAFRAME_FIRST_DATA_ROW_NUMBER = 2
 
 
 def _ok_result(**payload: Any) -> str:
@@ -26,6 +31,11 @@ def _ok_result(**payload: Any) -> str:
 
 def _error_result(message: str, **payload: Any) -> str:
     return json.dumps({"ok": False, "error": message, **payload}, default=_json_default)
+
+
+def _tool_exception(tool_name: str, exc: Exception, **payload: Any) -> str:
+    logger.debug("Tool %s failed", tool_name, exc_info=exc)
+    return _error_result(str(exc), **payload)
 
 
 def _json_default(value: Any) -> Any:
@@ -104,10 +114,10 @@ def _get_table_dataframe(
 
     min_col, _min_row, max_col, max_row = range_boundaries(table_meta["range"])
     header_row = int(table_meta.get("header_row", 1))
-    data_start = max(header_row - 1, 0)
-    # The runtime sheet DataFrame is loaded with Excel row 1 as the header, so
-    # DataFrame row 0 corresponds to Excel row 2.
-    data_end = max(max_row - 2, data_start - 1)
+    data_start = max(header_row - _WORKSHEET_HEADER_ROW_NUMBER, 0)
+    # The runtime sheet DataFrame is loaded with worksheet row 1 as the header,
+    # so DataFrame row 0 corresponds to worksheet row 2.
+    data_end = max(max_row - _DATAFRAME_FIRST_DATA_ROW_NUMBER, data_start - 1)
     subset = dataframe.iloc[data_start : data_end + 1, min_col - 1 : max_col].copy()
     subset.columns = table_meta.get("columns", list(subset.columns))
     subset = subset.reset_index(drop=True)
@@ -166,7 +176,7 @@ async def inspect_workbook(config: ToolConfig) -> str:
             return _error_result("Workbook metadata is not available in runtime config")
         return _ok_result(workbook_meta=workbook_meta)
     except Exception as exc:  # noqa: BLE001
-        return _error_result(str(exc))
+        return _tool_exception("inspect_workbook", exc)
 
 
 @tool
@@ -209,7 +219,7 @@ async def get_sheet_sample(
             rows=_records(sample),
         )
     except Exception as exc:  # noqa: BLE001
-        return _error_result(str(exc), table_id=table_id)
+        return _tool_exception("get_sheet_sample", exc, table_id=table_id)
 
 
 @tool
@@ -258,7 +268,12 @@ async def get_column_info(
             column=stats,
         )
     except Exception as exc:  # noqa: BLE001
-        return _error_result(str(exc), table_id=table_id, column_name=column_name)
+        return _tool_exception(
+            "get_column_info",
+            exc,
+            table_id=table_id,
+            column_name=column_name,
+        )
 
 
 @tool
@@ -313,7 +328,12 @@ async def search_cells(
             rows=_records(matches.head(clamped_limit)),
         )
     except Exception as exc:  # noqa: BLE001
-        return _error_result(str(exc), table_id=table_id, column_name=column_name)
+        return _tool_exception(
+            "search_cells",
+            exc,
+            table_id=table_id,
+            column_name=column_name,
+        )
 
 
 @tool
@@ -334,7 +354,7 @@ async def execute_code(code: str, config: ToolConfig = None) -> str:
             available_sheets=sorted(dataframes.keys()),
         )
     except Exception as exc:  # noqa: BLE001
-        return _error_result(str(exc))
+        return _tool_exception("execute_code", exc)
 
 
 @tool
@@ -369,7 +389,7 @@ async def load_sheet(sheet_name: str, config: ToolConfig = None) -> str:
             loaded_sheet_names=sorted(dataframes.keys()),
         )
     except Exception as exc:  # noqa: BLE001
-        return _error_result(str(exc), sheet_name=sheet_name)
+        return _tool_exception("load_sheet", exc, sheet_name=sheet_name)
 
 
 TOOLS = [

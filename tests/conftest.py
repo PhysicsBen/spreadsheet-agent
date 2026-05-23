@@ -119,7 +119,8 @@ def collision_tables_xlsx() -> bytes:
     ws.append(["Name", "Amount"])
     ws.append(["Alice", 100])
     ws.append(["Bob", 200])
-    # Use explicit empty cells so the inspector sees a fully blank separator row.
+    # Use explicit empty cells in both columns so the inspector sees a fully
+    # blank separator row between the two same-shaped regions.
     ws.append([None, None])
     ws.append(["Name", "Amount"])
     ws.append(["Carrot", 10])
