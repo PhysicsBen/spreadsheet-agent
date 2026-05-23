@@ -1,6 +1,7 @@
 """Application settings loaded from environment variables via pydantic-settings."""
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,9 +13,24 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # OpenAI
+    # LLM provider — one of: "openai" | "azure" | "databricks"
+    llm_provider: Literal["openai", "azure", "databricks"] = "openai"
+
+    # OpenAI (used when llm_provider == "openai")
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o"
+    openai_model: str = "gpt-5.4"
+
+    # Azure OpenAI (used when llm_provider == "azure")
+    azure_openai_api_key: str = ""
+    azure_openai_endpoint: str = ""
+    azure_openai_deployment: str = "gpt-4o"
+    azure_openai_api_version: str = "2024-02-15-preview"
+
+    # Databricks (used when llm_provider == "databricks")
+    # databricks_host: e.g. https://adb-xxx.azuredatabricks.net
+    databricks_host: str = ""
+    databricks_token: str = ""
+    databricks_model: str = "databricks-meta-llama-3-1-70b-instruct"
 
     # File handling
     max_file_size_mb: int = 50
@@ -41,6 +57,15 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     log_format: str = "text"
+
+    @property
+    def active_model_name(self) -> str:
+        """The model identifier for the active provider, used in response metadata."""
+        if self.llm_provider == "azure":
+            return self.azure_openai_deployment
+        if self.llm_provider == "databricks":
+            return self.databricks_model
+        return self.openai_model
 
 
 # Module-level singleton — imported by other modules as `from core.config import settings`

@@ -78,13 +78,13 @@ def _extract_token_usage(last_ai_message: AIMessage | None) -> int:
 
 def _extract_model(last_ai_message: AIMessage | None) -> str:
     if last_ai_message is None:
-        return settings.openai_model
+        return settings.active_model_name
     response_metadata = getattr(last_ai_message, "response_metadata", None)
     if isinstance(response_metadata, dict):
         model_name = response_metadata.get("model_name")
         if isinstance(model_name, str) and model_name:
             return model_name
-    return settings.openai_model
+    return settings.active_model_name
 
 
 def _extract_needs_clarification(last_ai_message: AIMessage | None) -> bool:

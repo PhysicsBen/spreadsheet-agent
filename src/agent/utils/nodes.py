@@ -5,7 +5,7 @@ from typing import Any
 
 from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI, ChatOpenAI
 from langgraph.prebuilt import ToolNode
 
 from agent.prompts import build_system_prompt
@@ -32,6 +32,29 @@ def _get_runtime_dataframes(config: RunnableConfig | None) -> dict[str, Any]:
     raise ValueError("config['configurable']['dataframes'] must be a dictionary")
 
 
+def _build_default_model() -> Any:
+    """Construct the default LLM client based on the configured provider."""
+    provider = settings.llm_provider
+    if provider == "azure":
+        return AzureChatOpenAI(
+            azure_deployment=settings.azure_openai_deployment,
+            azure_endpoint=settings.azure_openai_endpoint,
+            api_key=settings.azure_openai_api_key,  # type: ignore[arg-type]
+            api_version=settings.azure_openai_api_version,
+        )
+    if provider == "databricks":
+        return ChatOpenAI(
+            model=settings.databricks_model,
+            api_key=settings.databricks_token,  # type: ignore[arg-type]
+            base_url=f"{settings.databricks_host.rstrip('/')}/serving-endpoints",
+        )
+    # Default: OpenAI
+    return ChatOpenAI(
+        model=settings.openai_model,
+        api_key=settings.openai_api_key,  # type: ignore[arg-type]
+    )
+
+
 def _get_model(config: RunnableConfig | None) -> Any:
     configurable = _get_configurable(config)
     llm = configurable.get("llm")
@@ -41,13 +64,10 @@ def _get_model(config: RunnableConfig | None) -> Any:
     global _DEFAULT_MODEL
     if _DEFAULT_MODEL is None:
         with _DEFAULT_MODEL_LOCK:
-            # Build the shared ChatOpenAI client lazily while preventing races when
+            # Build the shared client lazily while preventing races when
             # multiple graph invocations initialize the default model at once.
             if _DEFAULT_MODEL is None:
-                _DEFAULT_MODEL = ChatOpenAI(
-                    model=settings.openai_model,
-                    api_key=settings.openai_api_key,
-                )
+                _DEFAULT_MODEL = _build_default_model()
     return _DEFAULT_MODEL
 
 
