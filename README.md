@@ -12,6 +12,7 @@ An AI agent that answers natural language questions about Excel spreadsheets. It
 - [Agent Tools](#agent-tools)
 - [API Reference](#api-reference)
 - [Getting Started](#getting-started)
+- [Local Chat UI](#local-chat-ui)
 - [Running with Docker](#running-with-docker)
 - [Configuration](#configuration)
 - [Development Workflow](#development-workflow)
@@ -216,6 +217,53 @@ curl -X POST http://localhost:8000/sessions/abc123/query \
   -H "Content-Type: application/json" \
   -d '{"question": "Which region had the highest growth?", "thread_id": "t1"}'
 ```
+
+---
+
+## Local Chat UI
+
+A Streamlit-based chat interface is included for testing the agent locally. It is a
+dev/test tool only — it calls the FastAPI backend and requires it to be running.
+
+### Setup
+
+```bash
+# Install dev dependencies (includes streamlit)
+uv sync --extra dev
+```
+
+### Start the backend
+
+```bash
+# Option A — Docker Compose (recommended)
+docker compose up
+
+# Option B — dev server with auto-reload
+uv run fastapi dev src/api/main.py
+```
+
+### Run the UI
+
+```bash
+streamlit run ui/app.py
+```
+
+The UI will open at `http://localhost:8501`. By default it connects to the API at
+`http://localhost:8000`. To point it at a different address, set the `API_BASE_URL`
+environment variable before starting:
+
+```bash
+API_BASE_URL=http://my-server:8000 streamlit run ui/app.py
+```
+
+### Features
+
+- **Sidebar** — upload `.xlsx`, `.xlsm`, `.xls`, or `.xlsb` files; view workbook
+  metadata (sheets, dimensions, detected tables); start a new conversation thread
+  or switch to a different file.
+- **Chat area** — ask natural-language questions about your spreadsheet; each
+  assistant reply includes a collapsed *Sources & Usage* panel showing the tables
+  consulted, tool calls made, tokens consumed, and model used.
 
 ---
 
