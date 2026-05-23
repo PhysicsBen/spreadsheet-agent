@@ -84,7 +84,11 @@ def render_sidebar() -> None:
             with st.spinner("Inspecting workbook…"):
                 try:
                     data = _post_session(uploaded_file.read(), uploaded_file.name)
-                    st.session_state["session_id"] = str(data["session_id"])
+                    session_id = data.get("session_id")
+                    if not session_id:
+                        st.error("Upload succeeded but the API returned no session_id.")
+                        return
+                    st.session_state["session_id"] = str(session_id)
                     st.session_state["workbook_meta"] = data.get("workbook_meta", {})
                     st.session_state["thread_id"] = None
                     st.session_state["messages"] = []
@@ -244,7 +248,7 @@ def render_chat() -> None:
                 return
 
         # Persist thread_id for follow-up questions
-        st.session_state["thread_id"] = str(result.get("thread_id", ""))
+        st.session_state["thread_id"] = result.get("thread_id")
 
         answer = result.get("answer", "")
         needs_clarification = result.get("needs_clarification", False)
