@@ -1,5 +1,8 @@
 # Tests for WorkbookMetadataMap construction and table detection logic
 
+import io
+
+import openpyxl
 
 from core.workbook_inspector import inspect_workbook
 
@@ -112,3 +115,51 @@ def test_table_range_string_format(simple_xlsx):
     assert ":" in table["range"]
     parts = table["range"].split(":")
     assert len(parts) == 2
+
+
+# ── Precedence: named tables suppress heuristic detection ────────────────────
+
+
+def test_named_table_takes_precedence_over_heuristic(named_table_xlsx):
+    """When named Excel tables exist, heuristic detection is not used."""
+    meta = inspect_workbook(named_table_xlsx, "named.xlsx")
+    tables = meta["sheets"][0]["tables"]
+    types = [t["type"] for t in tables]
+    # All returned tables must be named — no heuristically detected tables
+    assert "detected" not in types
+    assert "named" in types
+
+
+# ── formula_values_available = True when cached values are present ────────────
+
+
+def test_formula_values_available_with_cached_values(formula_xlsx_with_cached):
+    """formula_values_available should be True when formulas have cached values."""
+    meta = inspect_workbook(formula_xlsx_with_cached, "calc_cached.xlsx")
+    assert meta["formula_values_available"] is True
+
+
+# ── Multi-row header handling ────────────────────────────────────────────────
+
+
+def test_multi_row_header_sheet_detected_from_first_row(tmp_path):
+    """A sheet whose first two rows are both header-like should be detected at row 1."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "MultiHeader"
+    # Row 1: primary headers, Row 2: sub-headers, Rows 3-5: data
+    ws.append(["Category", "Q1", "Q2"])
+    ws.append(["(label)", "(jan-mar)", "(apr-jun)"])
+    ws.append(["Widgets", 100, 200])
+    ws.append(["Gadgets", 150, 250])
+    buf = io.BytesIO()
+    wb.save(buf)
+    multi_header_bytes = buf.getvalue()
+
+    meta = inspect_workbook(multi_header_bytes, "multi_header.xlsx")
+    tables = meta["sheets"][0]["tables"]
+    assert len(tables) >= 1
+    # header_row should point at the first row of the region (row 1)
+    assert tables[0]["header_row"] == 1
+    # Columns come from the first row
+    assert tables[0]["columns"] == ["Category", "Q1", "Q2"]
