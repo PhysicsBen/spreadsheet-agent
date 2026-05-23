@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
+import asyncio
 
 from core.config import settings
 
@@ -70,9 +71,9 @@ class SessionStore:
 
         # Persist file
         session_dir = self.uploads_dir / session_id
-        session_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(session_dir.mkdir, parents=True, exist_ok=True)
         file_path = session_dir / filename
-        file_path.write_bytes(file_bytes)
+        await asyncio.to_thread(file_path.write_bytes, file_bytes)
 
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute(
@@ -139,14 +140,14 @@ class SessionStore:
 
         # Remove file from disk
         file_path = Path(session["file_path"])
-        if file_path.exists():
-            file_path.unlink()
+        if await asyncio.to_thread(file_path.exists):
+            await asyncio.to_thread(file_path.unlink)
 
         # Try to remove the now-empty session directory
         session_dir = file_path.parent
-        if session_dir.exists() and session_dir != self.uploads_dir:
+        if await asyncio.to_thread(session_dir.exists) and session_dir != self.uploads_dir:
             with contextlib.suppress(OSError):
-                session_dir.rmdir()
+                await asyncio.to_thread(session_dir.rmdir)
 
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
