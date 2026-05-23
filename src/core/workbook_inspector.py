@@ -11,6 +11,10 @@ from openpyxl.worksheet.worksheet import Worksheet
 # Number of formula cells to sample when checking for cached values.
 _FORMULA_SAMPLE_SIZE = 5
 
+# Sheets with more rows than this skip the full cell scan in heuristic detection.
+# Instead, a single table covering the full extent is inferred from the first row.
+_LARGE_SHEET_ROW_THRESHOLD = 10_000
+
 
 def inspect_workbook(
     source: Path | bytes,
@@ -39,15 +43,22 @@ def inspect_workbook(
     else:
         filename = filename or "unknown.xlsx"
 
-    formula_values_available = _check_formula_values_available(source)
+    # Load 1 (fast, read-only): locate formula cells so we can later verify
+    # whether cached values exist.  read_only=True avoids loading styles and
+    # is substantially faster than a full parse for this sampling step.
+    formula_cell_locations = _find_formula_cell_locations(source)
 
-    # Load without read_only so ws.tables and ws.merged_cells are accessible.
-    # data_only=True so formula cells return their cached value rather than the
-    # formula string (consistent with what the agent will eventually see).
+    # Load 2 (full load): structural inspection.  Not read_only so ws.tables
+    # and ws.merged_cells are accessible.  data_only=True so cached formula
+    # values are returned rather than formula strings.
     if isinstance(source, Path):
         wb = openpyxl.load_workbook(source, data_only=True)
     else:
         wb = openpyxl.load_workbook(BytesIO(source), data_only=True)
+
+    # Reuse the already-loaded workbook to check formula cache — eliminates
+    # the third openpyxl parse that the previous implementation required.
+    formula_values_available = _check_formula_cache_in_wb(wb, formula_cell_locations)
 
     sheets_meta: list[dict[str, Any]] = []
 
@@ -84,17 +95,23 @@ def inspect_workbook(
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
 
-def _check_formula_values_available(source: Path | bytes) -> bool:
-    """Return True if formula cells have cached values (or no formulas exist)."""
-    # Find formula cells by loading without data_only (reads formula text)
+def _find_formula_cell_locations(
+    source: Path | bytes,
+) -> list[tuple[str, int, int]]:
+    """Return up to _FORMULA_SAMPLE_SIZE formula-cell locations as (sheet, row, col).
+
+    Uses read_only=True so openpyxl skips styles and formatting — significantly
+    faster than a full load for large files.  data_only=False is required so
+    formula strings are returned rather than cached values.
+    """
     if isinstance(source, Path):
-        wb_f = openpyxl.load_workbook(source, read_only=True, data_only=False)
+        wb = openpyxl.load_workbook(source, read_only=True, data_only=False)
     else:
-        wb_f = openpyxl.load_workbook(BytesIO(source), read_only=True, data_only=False)
+        wb = openpyxl.load_workbook(BytesIO(source), read_only=True, data_only=False)
 
-    formula_cells: list[tuple[str, int, int]] = []  # (sheet, row, col)
+    formula_cells: list[tuple[str, int, int]] = []
 
-    for ws in wb_f.worksheets:
+    for ws in wb.worksheets:
         for row in ws.iter_rows():
             for cell in row:
                 if isinstance(cell.value, str) and cell.value.startswith("="):
@@ -106,35 +123,29 @@ def _check_formula_values_available(source: Path | bytes) -> bool:
         if len(formula_cells) >= _FORMULA_SAMPLE_SIZE:
             break
 
-    wb_f.close()
+    wb.close()
+    return formula_cells
 
+
+def _check_formula_cache_in_wb(
+    wb: openpyxl.Workbook,
+    formula_cells: list[tuple[str, int, int]],
+) -> bool:
+    """Return True if formula cells have cached values, using an already-loaded workbook.
+
+    The workbook must have been loaded with data_only=True.  When no formula
+    locations are provided the function returns True (vacuously available).
+    """
     if not formula_cells:
-        return True  # No formulas → vacuously available
+        return True
 
-    # Check whether data_only version has non-None values for those cells
-    if isinstance(source, Path):
-        wb_d = openpyxl.load_workbook(source, read_only=True, data_only=True)
-    else:
-        wb_d = openpyxl.load_workbook(BytesIO(source), read_only=True, data_only=True)
-
-    has_cached = False
     for sheet_name, target_row, target_col in formula_cells:
-        ws_d = wb_d[sheet_name]
-        for row in ws_d.iter_rows(
-            min_row=target_row,
-            max_row=target_row,
-            min_col=target_col,
-            max_col=target_col,
-        ):
-            for cell in row:
-                if cell.value is not None:
-                    has_cached = True
-                    break
-        if has_cached:
-            break
+        ws = wb[sheet_name]
+        cell = ws.cell(row=target_row, column=target_col)
+        if cell.value is not None:
+            return True
 
-    wb_d.close()
-    return has_cached
+    return False
 
 
 def _check_error_cells(ws: Worksheet) -> bool:
@@ -200,6 +211,31 @@ def _detect_named_tables(ws: Worksheet, sheet_name: str) -> list[dict[str, Any]]
     return tables
 
 
+def _infer_large_sheet_table(
+    ws: Worksheet, sheet_name: str, max_row: int, max_col: int
+) -> list[dict[str, Any]]:
+    """Return a single inferred table using the first row as column headers.
+
+    Used as a fast fallback when a sheet is too large for the full cell scan.
+    """
+    columns = []
+    for c in range(1, max_col + 1):
+        cell = ws.cell(row=1, column=c)
+        val = cell.value
+        columns.append(str(val) if val is not None else f"Column{c}")
+
+    range_str = f"A1:{get_column_letter(max_col)}{max_row}"
+    return [
+        {
+            "id": f"{sheet_name}.table_0",
+            "type": "detected",
+            "range": range_str,
+            "header_row": 1,
+            "columns": columns,
+        }
+    ]
+
+
 def _detect_contiguous_regions(ws: Worksheet, sheet_name: str) -> list[dict[str, Any]]:
     """Heuristically detect tables by finding contiguous non-empty cell blocks."""
     max_row = ws.max_row
@@ -207,6 +243,11 @@ def _detect_contiguous_regions(ws: Worksheet, sheet_name: str) -> list[dict[str,
 
     if not max_row or not max_col:
         return []
+
+    # For very large sheets, iterating every cell is prohibitively slow.
+    # Fall back to inferring a single table from the sheet extent.
+    if max_row > _LARGE_SHEET_ROW_THRESHOLD:
+        return _infer_large_sheet_table(ws, sheet_name, max_row, max_col)
 
     # Collect coordinates of non-empty cells
     non_empty: set[tuple[int, int]] = set()

@@ -42,6 +42,7 @@ class Settings(BaseSettings):
 
     # Timeouts / iteration caps
     code_execution_timeout_secs: int = 10
+    inspect_timeout_secs: int = 300  # max seconds for workbook inspection at upload
     query_timeout_secs: int = 90
     max_agent_iterations: int = 15
 
