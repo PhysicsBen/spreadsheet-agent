@@ -3,7 +3,9 @@
 from uuid import UUID
 
 
-async def _create_session(api_client, file_bytes: bytes, filename: str = "workbook.xlsx"):
+async def _create_session(
+    api_client, file_bytes: bytes, filename: str = "workbook.xlsx"
+):
     client, _ = api_client
     response = await client.post(
         "/api/v1/sessions",

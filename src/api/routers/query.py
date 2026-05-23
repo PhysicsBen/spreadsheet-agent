@@ -2,8 +2,9 @@
 
 import asyncio
 import json
+import logging
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -15,16 +16,25 @@ from core.dataframe_loader import load_sheets
 from core.session_store import SessionNotFoundError, SessionStore
 
 router = APIRouter(prefix="/sessions", tags=["query"])
+logger = logging.getLogger(__name__)
 
 
 def _get_session_store(request: Request) -> SessionStore:
     return request.app.state.session_store
 
 
+SessionStoreDep = Annotated[SessionStore, Depends(_get_session_store)]
+
+
 def _extract_loaded_sheet_names(agent_graph: Any, thread_id: str) -> list[str]:
     try:
         snapshot = agent_graph.get_state({"configurable": {"thread_id": thread_id}})
-    except Exception:  # noqa: BLE001
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        logger.debug(
+            "Unable to restore loaded_sheet_names for thread %s",
+            thread_id,
+            exc_info=exc,
+        )
         return []
 
     loaded = snapshot.values.get("loaded_sheet_names", [])
@@ -59,7 +69,9 @@ def _extract_token_usage(last_ai_message: AIMessage | None) -> int:
     response_metadata = getattr(last_ai_message, "response_metadata", None)
     if isinstance(response_metadata, dict):
         token_usage = response_metadata.get("token_usage")
-        if isinstance(token_usage, dict) and isinstance(token_usage.get("total_tokens"), int):
+        if isinstance(token_usage, dict) and isinstance(
+            token_usage.get("total_tokens"), int
+        ):
             return token_usage["total_tokens"]
     return 0
 
@@ -73,6 +85,17 @@ def _extract_model(last_ai_message: AIMessage | None) -> str:
         if isinstance(model_name, str) and model_name:
             return model_name
     return settings.openai_model
+
+
+def _extract_needs_clarification(last_ai_message: AIMessage | None) -> bool:
+    if last_ai_message is None:
+        return False
+    additional_kwargs = getattr(last_ai_message, "additional_kwargs", None)
+    if isinstance(additional_kwargs, dict):
+        flag = additional_kwargs.get("needs_clarification")
+        if isinstance(flag, bool):
+            return flag
+    return False
 
 
 def _extract_sources(messages: list[Any]) -> list[QuerySource]:
@@ -92,7 +115,11 @@ def _extract_sources(messages: list[Any]) -> list[QuerySource]:
         table_id = payload.get("table_id")
         sheet = payload.get("sheet_name") or payload.get("sheet")
         tool_used = message.name or payload.get("tool_used")
-        if not (isinstance(table_id, str) and isinstance(sheet, str) and isinstance(tool_used, str)):
+        if not (
+            isinstance(table_id, str)
+            and isinstance(sheet, str)
+            and isinstance(tool_used, str)
+        ):
             continue
         deduped[(table_id, sheet, tool_used)] = QuerySource(
             table_id=table_id,
@@ -107,7 +134,7 @@ async def query_session(
     request: Request,
     session_id: str,
     payload: QueryRequest,
-    session_store: SessionStore = Depends(_get_session_store),
+    session_store: SessionStoreDep,
 ) -> QueryResponse:
     try:
         session_record = await session_store.get(session_id)
@@ -162,7 +189,6 @@ async def query_session(
     last_ai_message = _extract_last_ai_message(messages)
     answer = _extract_answer(last_ai_message)
     sources = _extract_sources(messages)
-    needs_clarification = answer.strip().endswith("?") and not sources
 
     return QueryResponse(
         answer=answer,
@@ -171,5 +197,5 @@ async def query_session(
         model=_extract_model(last_ai_message),
         tokens_used=_extract_token_usage(last_ai_message),
         sources=sources,
-        needs_clarification=needs_clarification,
+        needs_clarification=_extract_needs_clarification(last_ai_message),
     )

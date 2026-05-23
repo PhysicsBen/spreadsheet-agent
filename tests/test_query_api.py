@@ -3,7 +3,9 @@
 from uuid import uuid4
 
 
-async def _create_session(api_client, file_bytes: bytes, filename: str = "workbook.xlsx"):
+async def _create_session(
+    api_client, file_bytes: bytes, filename: str = "workbook.xlsx"
+):
     client, _ = api_client
     response = await client.post(
         "/api/v1/sessions",
@@ -19,7 +21,7 @@ async def _create_session(api_client, file_bytes: bytes, filename: str = "workbo
     return response.json()
 
 
-async def test_single_turn_query_returns_answer_and_sources(simple_xlsx, api_client):
+async def test_single_turn_query_returns_complete_response(simple_xlsx, api_client):
     client, _ = api_client
     session = await _create_session(api_client, simple_xlsx)
 
@@ -44,7 +46,9 @@ async def test_single_turn_query_returns_answer_and_sources(simple_xlsx, api_cli
     assert payload["needs_clarification"] is False
 
 
-async def test_multi_turn_query_reuses_same_thread(simple_xlsx, api_client, random_thread_id):
+async def test_multi_turn_query_reuses_same_thread(
+    simple_xlsx, api_client, random_thread_id
+):
     client, _ = api_client
     session = await _create_session(api_client, simple_xlsx)
 

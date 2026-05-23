@@ -1,5 +1,6 @@
 """SQLite-backed session metadata store + file path helpers."""
 
+import asyncio
 import contextlib
 import json
 import uuid
@@ -8,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 import aiosqlite
-import asyncio
 
 from core.config import settings
 
@@ -145,7 +145,10 @@ class SessionStore:
 
         # Try to remove the now-empty session directory
         session_dir = file_path.parent
-        if await asyncio.to_thread(session_dir.exists) and session_dir != self.uploads_dir:
+        if (
+            await asyncio.to_thread(session_dir.exists)
+            and session_dir != self.uploads_dir
+        ):
             with contextlib.suppress(OSError):
                 await asyncio.to_thread(session_dir.rmdir)
 

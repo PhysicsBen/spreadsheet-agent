@@ -1,7 +1,7 @@
 """FastAPI app entry point — lifespan, CORS, and router registration."""
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI
@@ -50,10 +50,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         cleanup_task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await cleanup_task
-        except asyncio.CancelledError:
-            pass
 
 
 app = FastAPI(title="Spreadsheet Agent API", lifespan=lifespan)
