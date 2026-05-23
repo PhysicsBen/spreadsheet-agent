@@ -63,3 +63,8 @@ app.add_middleware(
 )
 app.include_router(sessions.router, prefix="/api/v1")
 app.include_router(query.router, prefix="/api/v1")
+
+
+@app.get("/health", tags=["health"])
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
