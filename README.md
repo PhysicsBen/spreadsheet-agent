@@ -45,7 +45,10 @@ Built with **LangGraph** (stateful ReAct agent), **FastAPI**, and **OpenAI**.
 git clone https://github.com/PhysicsBen/spreadsheet-agent.git
 cd spreadsheet-agent
 cp .env.example .env
-# Edit .env and set OPENAI_API_KEY=sk-...
+# Open .env and set OPENAI_API_KEY
+
+# 3. Install dependencies
+uv sync
 
 # 2. Start the service
 docker compose up --build
@@ -53,7 +56,7 @@ docker compose up --build
 
 The API is available at `http://localhost:8000`.
 
-### Upload a spreadsheet
+### Quick example
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/sessions \
@@ -199,7 +202,36 @@ All configuration is via environment variables. See `.env.example` for a complet
 
 ---
 
-## Local Development
+---
+
+## Configuration
+
+All configuration is via environment variables. Copy `.env.example` to `.env` for local development.
+
+| Variable | Default | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | — | **Required.** OpenAI API key. |
+| `OPENAI_MODEL` | `gpt-4o` | Model name. |
+| `MAX_FILE_SIZE_MB` | `50` | Upload size limit in megabytes. |
+| `MAX_ROWS_PER_FETCH` | `100` | Maximum rows returned per tool call. |
+| `MAX_CODE_OUTPUT_CHARS` | `4000` | Sandbox output truncation limit. |
+| `MAX_QUESTION_CHARS` | `2000` | Maximum length of a submitted question. |
+| `CODE_EXECUTION_TIMEOUT_SECS` | `10` | Kill sandbox after this many seconds. |
+| `QUERY_TIMEOUT_SECS` | `90` | Overall agent query timeout. |
+| `MAX_AGENT_ITERATIONS` | `15` | Maximum ReAct loop iterations before a forced stop. |
+| `SESSION_CACHE_SIZE` | `0` | LRU cache size for DataFrames (0 = disabled). |
+| `SESSION_TTL_HOURS` | `24` | Sessions older than this are eligible for cleanup. |
+| `CLEANUP_INTERVAL_HOURS` | `6` | How often the cleanup background task runs. |
+| `DB_PATH` | `data/spreadsheet_agent.db` | SQLite database path. |
+| `UPLOADS_DIR` | `data/uploads` | Directory for uploaded Excel files. |
+| `LOG_LEVEL` | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
+| `LOG_FORMAT` | `text` | `text` for development, `json` for production log aggregators. |
+
+---
+
+## Development Workflow
+
+This project uses **TDD for deterministic core modules** and **tests-after for the agent and API layer** (since agent behavior is emergent from the LLM).
 
 ### Prerequisites
 
@@ -222,9 +254,20 @@ uv sync --extra dev
 
 # Start the dev server (auto-reload)
 uv run fastapi dev src/api/main.py
+
+# Run all tests
+uv run pytest
+
+# Run a specific test file
+uv run pytest tests/test_workbook_inspector.py -v
+
+# Run tests matching a keyword
+uv run pytest -k "sandbox" -v
 ```
 
 ### Testing
+
+Tests live in `tests/` mirroring the `src/` structure. Fixtures in `conftest.py` generate real Excel files programmatically (no binary fixtures committed to the repo).
 
 ```bash
 # Run the full test suite
@@ -245,6 +288,9 @@ uv run ruff check .
 
 # Auto-format code
 uv run ruff format .
+
+# Check formatting without modifying
+uv run ruff format . --check
 ```
 
 ---
