@@ -2,6 +2,8 @@
 
 from uuid import uuid4
 
+from core.config import settings
+
 
 async def _create_session(
     api_client, file_bytes: bytes, filename: str = "workbook.xlsx"
@@ -82,3 +84,55 @@ async def test_query_nonexistent_session_returns_404(api_client):
     )
 
     assert response.status_code == 404
+
+
+async def test_omitting_thread_id_creates_new_thread_each_time(simple_xlsx, api_client):
+    """Each request without a thread_id must get a distinct thread."""
+    client, _ = api_client
+    session = await _create_session(api_client, simple_xlsx)
+
+    first = await client.post(
+        f"/api/v1/sessions/{session['session_id']}/query",
+        json={"question": "Question A"},
+    )
+    second = await client.post(
+        f"/api/v1/sessions/{session['session_id']}/query",
+        json={"question": "Question B"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["thread_id"] != second.json()["thread_id"]
+
+
+async def test_question_exceeding_max_chars_returns_422(api_client, simple_xlsx):
+    client, _ = api_client
+    session = await _create_session(api_client, simple_xlsx)
+
+    long_question = "a" * (settings.max_question_chars + 1)
+    response = await client.post(
+        f"/api/v1/sessions/{session['session_id']}/query",
+        json={"question": long_question},
+    )
+    assert response.status_code == 422
+
+
+async def test_query_timeout_returns_504(simple_xlsx, api_client, monkeypatch):
+    """A graph that never returns should produce a 504 response."""
+    client, mock_graph = api_client
+
+    def _slow_invoke(initial_state, config):
+        import time
+
+        time.sleep(2)
+        return initial_state
+
+    monkeypatch.setattr(mock_graph, "invoke", _slow_invoke)
+    monkeypatch.setattr(settings, "query_timeout_secs", 0)
+
+    session = await _create_session(api_client, simple_xlsx)
+    response = await client.post(
+        f"/api/v1/sessions/{session['session_id']}/query",
+        json={"question": "Will this time out?"},
+    )
+    assert response.status_code == 504
