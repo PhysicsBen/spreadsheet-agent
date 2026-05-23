@@ -41,7 +41,13 @@ packages = ["src/agent", "src/api", "src/core"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+addopts = "-p no:langsmith_plugin -p no:langsmith"
+filterwarnings = [
+    "ignore::DeprecationWarning:pytest_asyncio",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.ruff]
 line-length = 88
