@@ -23,6 +23,11 @@ venv/
 data/uploads/
 data/*.db
 
+# Large sample data files (exceed GitHub's 100 MB limit)
+sample_data/*.xlsx
+!sample_data/complex_sales_workbook.xlsx
+!sample_data/edge_cases_workbook.xlsx
+
 # pytest / coverage
 .pytest_cache/
 .coverage

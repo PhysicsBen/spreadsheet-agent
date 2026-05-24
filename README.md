@@ -17,6 +17,7 @@ Built with **LangGraph** (stateful ReAct agent), **FastAPI**, and **OpenAI**.
 - [API Reference](#api-reference)
 - [Getting Started](#getting-started)
 - [Local Chat UI](#local-chat-ui)
+- [Running Locally](#running-locally)
 - [Running with Docker](#running-with-docker)
 - [Configuration](#configuration)
 - [Development Workflow](#development-workflow)
@@ -211,6 +212,50 @@ API_BASE_URL=http://my-server:8000 streamlit run ui/app.py
 - **Chat area** — ask natural-language questions about your spreadsheet; each
   assistant reply includes a collapsed *Sources & Usage* panel showing the tables
   consulted, tool calls made, tokens consumed, and model used.
+
+---
+
+## Running Locally
+
+### Prerequisites
+
+- Python 3.12+
+- [`uv`](https://docs.astral.sh/uv/) package manager
+
+### 1. Install dependencies
+
+```bash
+uv sync --extra dev
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+# Edit .env and set OPENAI_API_KEY
+```
+
+### 3. Start the API
+
+```bash
+uv run fastapi dev src/api/main.py
+```
+
+The API will be available at `http://localhost:8000` with auto-reload on code changes.
+
+### 4. Start the Streamlit UI (optional)
+
+In a second terminal:
+
+```bash
+streamlit run ui/app.py
+```
+
+The UI opens at `http://localhost:8501` and connects to the API at `http://localhost:8000` by default. To point it at a different address:
+
+```bash
+API_BASE_URL=http://my-server:8000 streamlit run ui/app.py
+```
 
 ---
 
