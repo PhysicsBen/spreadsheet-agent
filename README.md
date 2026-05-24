@@ -187,7 +187,7 @@ uv sync --extra dev
 docker compose up
 
 # Option B — dev server with auto-reload
-uv run fastapi dev src/api/main.py
+uv run uvicorn src.api.main:app --reload
 ```
 
 ### Run the UI
@@ -238,7 +238,7 @@ cp .env.example .env
 ### 3. Start the API
 
 ```bash
-uv run fastapi dev src/api/main.py
+uv run uvicorn src.api.main:app --reload
 ```
 
 The API will be available at `http://localhost:8000` with auto-reload on code changes.
@@ -359,7 +359,7 @@ cp .env.example .env
 uv sync --extra dev
 
 # Start the dev server (auto-reload)
-uv run fastapi dev src/api/main.py
+uv run uvicorn src.api.main:app --reload
 
 # Run all tests
 uv run pytest

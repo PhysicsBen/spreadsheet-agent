@@ -11,6 +11,11 @@ from openpyxl.worksheet.worksheet import Worksheet
 # Number of formula cells to sample when checking for cached values.
 _FORMULA_SAMPLE_SIZE = 5
 
+# Maximum rows to scan per sheet when searching for formula cells.
+# Pure-data sheets (e.g. CSV-converted xlsx) have no formulas; without this cap
+# the read_only pre-scan iterates every cell in every sheet for nothing.
+_FORMULA_SCAN_ROW_LIMIT = 1_000
+
 # Sheets with more rows than this skip the full cell scan in heuristic detection.
 # Instead, a single table covering the full extent is inferred from the first row.
 _LARGE_SHEET_ROW_THRESHOLD = 10_000
@@ -112,7 +117,7 @@ def _find_formula_cell_locations(
     formula_cells: list[tuple[str, int, int]] = []
 
     for ws in wb.worksheets:
-        for row in ws.iter_rows():
+        for row in ws.iter_rows(max_row=_FORMULA_SCAN_ROW_LIMIT):
             for cell in row:
                 if isinstance(cell.value, str) and cell.value.startswith("="):
                     formula_cells.append((ws.title, cell.row, cell.column))

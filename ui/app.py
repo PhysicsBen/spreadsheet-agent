@@ -35,12 +35,15 @@ def _truncate_uuid(value: str | None, chars: int = 8) -> str:
     return str(value)[:chars] + "…"
 
 
+UPLOAD_TIMEOUT_SECS = int(os.getenv("UPLOAD_TIMEOUT_SECS", "300"))
+
+
 def _post_session(file_bytes: bytes, filename: str) -> dict:
     """Upload a file and create a new session. Returns the response JSON."""
     resp = requests.post(
         f"{API_BASE_URL}/api/v1/sessions",
         files={"file": (filename, file_bytes)},
-        timeout=60,
+        timeout=UPLOAD_TIMEOUT_SECS,
     )
     resp.raise_for_status()
     return resp.json()
