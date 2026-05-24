@@ -173,6 +173,8 @@ curl http://localhost:8000/health
 A Streamlit-based chat interface is included for testing the agent locally. It is a
 dev/test tool only — it calls the FastAPI backend and requires it to be running.
 
+![Spreadsheet Agent UI — motor vehicle collisions example](assets/ui-demo.png)
+
 ### Setup
 
 ```bash
