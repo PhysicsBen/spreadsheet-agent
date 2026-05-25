@@ -9,19 +9,13 @@ Built with **LangGraph** (stateful ReAct agent), **FastAPI**, and **OpenAI**.
 ## Table of Contents
 
 - [Features](#features)
-- [Quick Start](#quick-start)
-- [API Reference](#api-reference)
-- [Architecture](#architecture)
-- [Key Design Decisions](#key-design-decisions)
-- [Agent Tools](#agent-tools)
-- [API Reference](#api-reference)
 - [Getting Started](#getting-started)
 - [Local Chat UI](#local-chat-ui)
-- [Running Locally](#running-locally)
 - [Running with Docker](#running-with-docker)
+- [API Reference](#api-reference)
+- [Architecture](#architecture)
 - [Configuration](#configuration)
 - [Development Workflow](#development-workflow)
-- [Testing](#testing)
 - [Deployment & Operations Runbook](#deployment--operations-runbook)
 - [Security Considerations](#security-considerations)
 - [Troubleshooting](#troubleshooting)
@@ -42,57 +36,114 @@ Built with **LangGraph** (stateful ReAct agent), **FastAPI**, and **OpenAI**.
 
 ---
 
-## Quick Start
+## Getting Started
 
-### Docker (recommended)
+This section covers everything you need to run the project locally for the first time.
+
+### Prerequisites
+
+Before you begin, make sure you have the following installed:
+
+- **Python 3.12+** — [python.org/downloads](https://www.python.org/downloads/)
+- **`uv`** — fast Python package manager ([install guide](https://docs.astral.sh/uv/getting-started/installation/))
+- **Git**
+- **An OpenAI API key** — [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+
+To verify your setup:
 
 ```bash
-# 1. Clone and configure
+python --version   # should print 3.12.x or higher
+uv --version
+git --version
+```
+
+### 1. Clone the repository
+
+```bash
 git clone https://github.com/PhysicsBen/spreadsheet-agent.git
 cd spreadsheet-agent
+```
+
+### 2. Install dependencies
+
+```bash
+uv sync --extra dev
+```
+
+This installs the application and all development dependencies (including the Streamlit UI and test tooling) into an isolated virtual environment managed by `uv`. You do not need to create a virtualenv manually.
+
+### 3. Configure environment variables
+
+```bash
 cp .env.example .env
-# Open .env and set OPENAI_API_KEY
-
-# 3. Install dependencies
-uv sync
-
-# 2. Start the service
-docker compose up --build
 ```
 
-The API is available at `http://localhost:8000`.
+Open `.env` in your editor and set your OpenAI API key:
 
-### Quick example
+```dotenv
+OPENAI_API_KEY=sk-...
+```
+
+The remaining defaults are suitable for local development. The two storage paths should be relative so that data is written inside the project directory:
+
+```dotenv
+DB_PATH=data/spreadsheet_agent.db
+UPLOADS_DIR=data/uploads
+```
+
+> The `data/` directory is gitignored. It will be created automatically on first run.
+
+### 4. Start the API server
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/sessions \
-  -F "file=@/path/to/your/spreadsheet.xlsx"
-# Returns: {"session_id": "abc123...", "workbook_meta": {...}}
+uv run uvicorn src.api.main:app --reload
 ```
 
-### Ask a question
+The API is available at **`http://localhost:8000`** with automatic reload on code changes. You should see output similar to:
 
-```bash
-curl -X POST http://localhost:8000/api/v1/sessions/<session_id>/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What is the total revenue for Q1?"}'
-# Returns: {"answer": "...", "thread_id": "...", "sources": [...]}
+```
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process
 ```
 
-### Continue the conversation
-
-```bash
-curl -X POST http://localhost:8000/api/v1/sessions/<session_id>/query \
-  -H "Content-Type: application/json" \
-  -d '{"question": "Break that down by region", "thread_id": "<thread_id>"}'
-```
-
-### Health check
+Verify the service is healthy:
 
 ```bash
 curl http://localhost:8000/health
 # {"status": "ok"}
 ```
+
+### 5. Try it out
+
+Upload a spreadsheet and ask a question:
+
+```bash
+# Upload a file — returns a session_id
+curl -X POST http://localhost:8000/api/v1/sessions \
+  -F "file=@/path/to/your/spreadsheet.xlsx"
+# {"session_id": "abc123...", "workbook_meta": {...}}
+
+# Ask a question
+curl -X POST http://localhost:8000/api/v1/sessions/<session_id>/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is the total revenue for Q1?"}'
+# {"answer": "...", "thread_id": "...", "sources": [...]}
+
+# Ask a follow-up (pass the thread_id to continue the conversation)
+curl -X POST http://localhost:8000/api/v1/sessions/<session_id>/query \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Break that down by region", "thread_id": "<thread_id>"}'
+```
+
+### 6. Start the Streamlit UI (optional)
+
+For a browser-based chat interface, open a second terminal and run:
+
+```bash
+streamlit run ui/app.py
+```
+
+The UI opens at **`http://localhost:8501`** and connects to the API at `http://localhost:8000` by default. See [Local Chat UI](#local-chat-ui) for more details.
 
 ---
 
@@ -217,104 +268,40 @@ API_BASE_URL=http://my-server:8000 streamlit run ui/app.py
 
 ---
 
-## Running Locally
-
-### Prerequisites
-
-- Python 3.12+
-- [`uv`](https://docs.astral.sh/uv/) package manager
-
-### 1. Install dependencies
-
-```bash
-uv sync --extra dev
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-# Edit .env and set OPENAI_API_KEY
-```
-
-### 3. Start the API
-
-```bash
-uv run uvicorn src.api.main:app --reload
-```
-
-The API will be available at `http://localhost:8000` with auto-reload on code changes.
-
-### 4. Start the Streamlit UI (optional)
-
-In a second terminal:
-
-```bash
-streamlit run ui/app.py
-```
-
-The UI opens at `http://localhost:8501` and connects to the API at `http://localhost:8000` by default. To point it at a different address:
-
-```bash
-API_BASE_URL=http://my-server:8000 streamlit run ui/app.py
-```
-
----
-
 ## Running with Docker
 
-### Docker Compose (recommended)
+If you prefer Docker over running the Python server directly:
 
 ```bash
-# Build and start
+# 1. Clone and configure
+git clone https://github.com/PhysicsBen/spreadsheet-agent.git
+cd spreadsheet-agent
+cp .env.example .env
+# Open .env and set OPENAI_API_KEY
+
+# 2. Build and start
 docker compose up --build
 
 # Run in the background
 docker compose up -d --build
+```
 
-| Decision | Rationale |
-|----------|-----------|
-| **DataFrames NOT in agent state** | DataFrames aren't JSON-serializable and can't be checkpointed. They're injected per-request via `config["configurable"]["dataframes"]`. |
-| **Session ≠ Thread** | A Session = the spreadsheet file. A Thread = one conversation. One session supports many independent threads. |
-| **Two-phase driver strategy** | openpyxl for structural inspection (only library exposing named tables, merged cells, hidden sheets); calamine (Rust) for fast data loading. |
-| **Lazy sheet loading** | Only sheets the agent requests are loaded — avoids memory bloat on large workbooks. |
-| **Graph compiled once** | The LangGraph graph is a module-level singleton compiled at import time, not per-request. |
-| **RestrictedPython sandbox** | Code execution uses compile-time restrictions + wall-clock timeout. Acceptable for trusted local use. |
-| **Workbook metadata in system prompt** | The full structural map is injected so the agent can reason about what's available before fetching data. |
-| **Output truncation** | Every tool enforces output size limits to protect the LLM context window. |
+The API is available at `http://localhost:8000`. Data is persisted to a named Docker volume (`spreadsheet-data`) mounted at `/app/data`, so sessions survive container restarts.
 
----
+To stop:
 
-## Environment Variables
+```bash
+docker compose down
 
-All configuration is via environment variables. See `.env.example` for a complete template.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OPENAI_API_KEY` | — | **Required.** Your OpenAI API key. |
-| `OPENAI_MODEL` | `gpt-4o` | LLM model name |
-| `MAX_FILE_SIZE_MB` | `50` | Maximum upload file size |
-| `MAX_ROWS_PER_FETCH` | `100` | Rows returned per tool call |
-| `MAX_CODE_OUTPUT_CHARS` | `4000` | Truncation limit for sandbox output |
-| `MAX_QUESTION_CHARS` | `2000` | Maximum question length |
-| `CODE_EXECUTION_TIMEOUT_SECS` | `10` | Sandbox execution timeout |
-| `QUERY_TIMEOUT_SECS` | `90` | Overall agent query timeout |
-| `MAX_AGENT_ITERATIONS` | `15` | Max ReAct loop iterations |
-| `SESSION_CACHE_SIZE` | `0` | LRU DataFrame cache size (0 = disabled) |
-| `SESSION_TTL_HOURS` | `24` | Session expiry for cleanup |
-| `CLEANUP_INTERVAL_HOURS` | `6` | Background cleanup interval |
-| `DB_PATH` | `data/spreadsheet_agent.db` | SQLite database path |
-| `UPLOADS_DIR` | `data/uploads` | Uploaded file storage directory |
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `LOG_FORMAT` | `text` | `text` (dev) or `json` (production) |
-
----
+# WARNING: this also deletes all uploaded files and session history
+docker compose down -v
+```
 
 ---
 
 ## Configuration
 
-All configuration is via environment variables. Copy `.env.example` to `.env` for local development.
+All configuration is via environment variables. Copy `.env.example` to `.env` for local development. The table below lists every supported variable.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -339,39 +326,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` fo
 
 ## Development Workflow
 
-This project uses **TDD for deterministic core modules** and **tests-after for the agent and API layer** (since agent behavior is emergent from the LLM).
-
-### Prerequisites
-
-- Python 3.12+
-- [`uv`](https://docs.astral.sh/uv/) package manager
-
-### Setup
-
-```bash
-# Clone and configure
-git clone https://github.com/PhysicsBen/spreadsheet-agent.git
-cd spreadsheet-agent
-cp .env.example .env
-# Edit .env: set OPENAI_API_KEY and use relative storage paths:
-#   DB_PATH=data/spreadsheet_agent.db
-#   UPLOADS_DIR=data/uploads
-
-# Install dependencies
-uv sync --extra dev
-
-# Start the dev server (auto-reload)
-uv run uvicorn src.api.main:app --reload
-
-# Run all tests
-uv run pytest
-
-# Run a specific test file
-uv run pytest tests/test_workbook_inspector.py -v
-
-# Run tests matching a keyword
-uv run pytest -k "sandbox" -v
-```
+This project uses **TDD for deterministic core modules** and **tests-after for the agent and API layer** (since agent behavior is emergent from the LLM). Assumes you have already completed the [Getting Started](#getting-started) setup.
 
 ### Testing
 
@@ -386,6 +341,9 @@ uv run pytest -v
 
 # Run a specific test file
 uv run pytest tests/test_sandbox.py
+
+# Run tests matching a keyword
+uv run pytest -k "sandbox" -v
 ```
 
 ### Linting & Formatting
