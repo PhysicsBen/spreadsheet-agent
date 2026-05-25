@@ -99,7 +99,11 @@ def formula_xlsx() -> bytes:
 
 @pytest.fixture
 def two_region_xlsx() -> bytes:
-    """Workbook with two discontiguous table regions separated by a blank row."""
+    """Workbook with two discontiguous table regions separated by two blank rows.
+
+    Two blank rows act as an intentional visual separator between distinct tables.
+    A single blank row is treated as intra-table sparsity (see sparse_row_xlsx).
+    """
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Sheet1"
@@ -107,12 +111,66 @@ def two_region_xlsx() -> bytes:
     ws.append(["Product", "Price"])
     ws.append(["Apple", 1.5])
     ws.append(["Banana", 0.5])
-    # Blank row
+    # Two blank rows — clear separator between distinct tables
     ws.append([None, None])
-    # Second table at rows 5-7
+    ws.append([None, None])
+    # Second table at rows 6-8
     ws.append(["Category", "Count"])
     ws.append(["Fruit", 2])
     ws.append(["Veg", 5])
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@pytest.fixture
+def sparse_row_xlsx() -> bytes:
+    """Single logical table whose data rows are separated by one blank row.
+
+    Real-world spreadsheets often have sparse rows mid-table (e.g. a missing
+    value row, or a blank inserted for readability). The inspector should treat
+    a single-blank-row gap as intra-table sparsity and return one table.
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.cell(row=1, column=1).value = "ProjectCode"
+    ws.cell(row=1, column=2).value = "Owner"
+    ws.cell(row=1, column=3).value = "Budget"
+    ws.cell(row=2, column=1).value = "PROJ-A"
+    ws.cell(row=2, column=2).value = "Alice"
+    ws.cell(row=2, column=3).value = 150000
+    ws.cell(row=3, column=1).value = "PROJ-B"  # sparse: only col A
+    # row 4 intentionally blank
+    ws.cell(row=5, column=1).value = "PROJ-C"
+    ws.cell(row=5, column=2).value = "Bob"
+    ws.cell(row=5, column=3).value = 80000
+    ws.cell(row=6, column=1).value = "PROJ-D"
+    ws.cell(row=6, column=2).value = "Carol"
+    ws.cell(row=6, column=3).value = 220000
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@pytest.fixture
+def annotated_table_xlsx() -> bytes:
+    """Sheet with a single-cell annotation row, several blank rows, then a data table.
+
+    The annotation (e.g. a confidentiality notice) should be filtered out as
+    noise; only the substantive data table should be returned.
+    """
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.cell(row=1, column=1).value = "CONFIDENTIAL — Internal use only"
+    # rows 2-4 intentionally blank
+    ws.cell(row=5, column=1).value = "Name"
+    ws.cell(row=5, column=2).value = "Value"
+    ws.cell(row=6, column=1).value = "Alice"
+    ws.cell(row=6, column=2).value = 100
+    ws.cell(row=7, column=1).value = "Bob"
+    ws.cell(row=7, column=2).value = 200
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -194,8 +252,10 @@ def collision_tables_xlsx() -> bytes:
     ws.append(["Name", "Amount"])
     ws.append(["Alice", 100])
     ws.append(["Bob", 200])
-    # Use explicit empty cells in both columns so the inspector sees a fully
-    # blank separator row between the two same-shaped regions.
+    # Two blank rows — explicit visual separator so these are detected as two
+    # distinct tables rather than one sparse table (1 blank row = intra-table
+    # sparsity per _ROW_GAP_TOLERANCE; 2+ blank rows = table boundary).
+    ws.append([None, None])
     ws.append([None, None])
     ws.append(["Name", "Amount"])
     ws.append(["Carrot", 10])

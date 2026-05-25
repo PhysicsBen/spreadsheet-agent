@@ -93,7 +93,7 @@ async def create_session(
             asyncio.to_thread(inspect_workbook, file_bytes, filename),
             timeout=settings.inspect_timeout_secs,
         )
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         raise HTTPException(
             status.HTTP_504_GATEWAY_TIMEOUT,
             f"Workbook inspection timed out after {settings.inspect_timeout_secs}s. "

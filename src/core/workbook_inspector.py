@@ -8,6 +8,8 @@ import openpyxl
 from openpyxl.utils import get_column_letter, range_boundaries
 from openpyxl.worksheet.worksheet import Worksheet
 
+from core.config import settings
+
 # Number of formula cells to sample when checking for cached values.
 _FORMULA_SAMPLE_SIZE = 5
 
@@ -19,6 +21,11 @@ _FORMULA_SCAN_ROW_LIMIT = 1_000
 # Sheets with more rows than this skip the full cell scan in heuristic detection.
 # Instead, a single table covering the full extent is inferred from the first row.
 _LARGE_SHEET_ROW_THRESHOLD = 10_000
+
+# Defaults for the heuristic table-detection tunables (overridden by settings).
+# See Settings.table_row_gap_tolerance and Settings.table_min_cells.
+_ROW_GAP_TOLERANCE_DEFAULT = 1
+_MIN_TABLE_CELLS_DEFAULT = 2
 
 
 def inspect_workbook(
@@ -265,7 +272,8 @@ def _detect_contiguous_regions(ws: Worksheet, sheet_name: str) -> list[dict[str,
         return []
 
     rows_with_data = sorted({r for r, _ in non_empty})
-    row_groups = _find_contiguous_groups(rows_with_data)
+    row_gap = settings.table_row_gap_tolerance
+    row_groups = _find_contiguous_groups(rows_with_data, max_gap=row_gap)
 
     tables: list[dict[str, Any]] = []
     table_idx = 0
@@ -292,6 +300,14 @@ def _detect_contiguous_regions(ws: Worksheet, sheet_name: str) -> list[dict[str,
                 f":{get_column_letter(max_col_g)}{max_row_g}"
             )
 
+            cell_count = sum(
+                1
+                for r, c in non_empty
+                if min_row_g <= r <= max_row_g and min_col_g <= c <= max_col_g
+            )
+            if cell_count < settings.table_min_cells:
+                continue
+
             tables.append(
                 {
                     "id": f"{sheet_name}.table_{table_idx}",
@@ -306,8 +322,17 @@ def _detect_contiguous_regions(ws: Worksheet, sheet_name: str) -> list[dict[str,
     return tables
 
 
-def _find_contiguous_groups(sorted_values: list[int]) -> list[list[int]]:
-    """Split a sorted list of integers into groups of consecutive values."""
+def _find_contiguous_groups(
+    sorted_values: list[int], max_gap: int = 0
+) -> list[list[int]]:
+    """Split a sorted list of integers into groups where gaps between successive
+    values do not exceed *max_gap* missing integers.
+
+    With ``max_gap=0`` (default) only strictly consecutive values are grouped
+    together, preserving the original behaviour.  With ``max_gap=1`` a single
+    missing value (e.g. one blank row) is bridged, treating the surrounding
+    values as part of the same group.
+    """
     if not sorted_values:
         return []
 
@@ -315,7 +340,7 @@ def _find_contiguous_groups(sorted_values: list[int]) -> list[list[int]]:
     current: list[int] = [sorted_values[0]]
 
     for v in sorted_values[1:]:
-        if v == current[-1] + 1:
+        if v <= current[-1] + 1 + max_gap:
             current.append(v)
         else:
             groups.append(current)

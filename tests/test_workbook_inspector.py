@@ -99,6 +99,23 @@ def test_two_region_detection(two_region_xlsx):
     assert ("Category", "Count") in col_sets
 
 
+def test_sparse_row_merged_into_one_table(sparse_row_xlsx):
+    """A single blank row within a data region should not split the table."""
+    meta = inspect_workbook(sparse_row_xlsx, "sparse.xlsx")
+    tables = meta["sheets"][0]["tables"]
+    assert len(tables) == 1
+    assert tables[0]["columns"] == ["ProjectCode", "Owner", "Budget"]
+
+
+def test_single_cell_annotation_filtered(annotated_table_xlsx):
+    """Single-cell annotation rows (e.g. confidentiality notices) should be
+    excluded from the returned table list."""
+    meta = inspect_workbook(annotated_table_xlsx, "annotated.xlsx")
+    tables = meta["sheets"][0]["tables"]
+    assert len(tables) == 1
+    assert tables[0]["columns"] == ["Name", "Value"]
+
+
 def test_accepts_path(tmp_path, simple_xlsx):
     """inspect_workbook also accepts a file Path."""
     xlsx_file = tmp_path / "test.xlsx"

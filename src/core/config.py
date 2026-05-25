@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     query_timeout_secs: int = 90
     max_agent_iterations: int = 15
 
+    # Workbook inspection — heuristic table detection
+    table_row_gap_tolerance: int = 1  # blank rows bridged within a single table region
+    table_min_cells: int = 2  # detected regions with fewer cells are discarded as noise
+
     # Session management
     session_cache_size: int = 0
     session_ttl_hours: int = 24
